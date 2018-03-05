@@ -83,7 +83,7 @@ enum memory_order {
 
 }    // end namespace moodycamel
 
-#if (defined(AE_VCPP) && (_MSC_VER < 1700 || defined(__cplusplus_cli))) || defined(AE_ICC)
+#if (defined(AE_VCPP) && (_MSC_VER < 1700 || defined(__cplusplus_cli))) || (defined(AE_ICC) && __INTEL_COMPILER < 1600)
 // VS2010 and ICC13 don't support std::atomic_*_fence, implement our own fences
 
 #include <intrin.h>
@@ -450,13 +450,13 @@ namespace moodycamel
 			bool timed_wait(std::int64_t timeout_usecs)
 			{
 				mach_timespec_t ts;
-				ts.tv_sec = timeout_usecs / 1000000;
+				ts.tv_sec = static_cast<unsigned int>(timeout_usecs / 1000000);
 				ts.tv_nsec = (timeout_usecs % 1000000) * 1000;
 
 				// added in OSX 10.10: https://developer.apple.com/library/prerelease/mac/documentation/General/Reference/APIDiffsMacOSX10_10SeedDiff/modules/Darwin.html
 				kern_return_t rc = semaphore_timedwait(m_sema, ts);
 
-				return rc != KERN_OPERATION_TIMED_OUT;
+				return rc != KERN_OPERATION_TIMED_OUT && rc != KERN_ABORTED;
 			}
 
 		    void signal()
@@ -526,7 +526,7 @@ namespace moodycamel
 				ts.tv_nsec += (usecs % usecs_in_1_sec) * 1000;
 				// sem_timedwait bombs if you have more than 1e9 in tv_nsec
 				// so we have to clean things up before passing it in
-				if (ts.tv_nsec > nsecs_in_1_sec) {
+				if (ts.tv_nsec >= nsecs_in_1_sec) {
 					ts.tv_nsec -= nsecs_in_1_sec;
 					++ts.tv_sec;
 				}
